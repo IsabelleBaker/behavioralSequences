@@ -157,6 +157,27 @@ if __name__ == '__main__':
                 behavior_a_start_time = 0
                 behavior_b_end_time = 0
                 behavioral_sequence_name = ""
+        if continuing_sequence or continuing_behavior:
+            probabilities_b = probability_sum
+            behavior_b = temp_b
+            behavioral_sequence_name = behavior_a + "_" + behavior_b
+            num_behavior_instances_b = num_behavior_instances
+            mean_probability = (probabilities_a + probabilities_b) / (
+                        num_behavior_instances_a + num_behavior_instances_b)
+            end_time = data.columns[data.shape[1] - 1]
+            animal_ID = data.at[i, data.columns[0]]
+            new_data = {'animal_ID': animal_ID,
+                        'behavioral_sequence_name': behavioral_sequence_name,
+                        'mean_probability': mean_probability,
+                        'start_time': start_time, 'end_time': end_time}
+            df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+            continuing_sequence = False
+            continuing_behavior = False
+            num_behavior_instances -= 1
+            probability_sum = probabilities_b
+            behavior_a = behavior_b
+            col_index -= 1
+            start_time = end_time
 
 
 
