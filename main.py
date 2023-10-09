@@ -59,8 +59,9 @@ if __name__ == '__main__':
         start_time = 0
         behavioral_sequence_name = ""
         first_seq = True
+        col_index = 1
 
-        for col_index in range(1, data.shape[1] - 1):
+        while col_index < (data.shape[1] - 1):
             # Get the next two behavior/probability pairs to look at
             current_data_a = cleanData(str(data.at[data.index[i], data.columns[col_index]]))
             current_data_b = cleanData(str(data.at[data.index[i], data.columns[col_index + 1]]))
@@ -86,10 +87,14 @@ if __name__ == '__main__':
                 # If the behaviors are different, but it's only just started
                 elif temp_a != temp_b and first_seq:
                     start_time = data.columns[col_index]
-                    probability_sum = float(probability_a) + float(probability_b)
+                    probabilities_a = float(probability_a)
+                    probability_sum = float(probability_b)
                     num_behavior_instances = 2
                     behavior_a = temp_a
+                    behavior_b = temp_b
+                    behavioral_sequence_name = behavior_a + "_" + behavior_b
                     continuing_behavior = True
+                    continuing_sequence = True
                     first_seq = False
                 # If the behaviors are different for the first time, set second behavior
                 elif temp_a != temp_b and not continuing_sequence:
@@ -123,7 +128,7 @@ if __name__ == '__main__':
                     behavior_a = behavior_b
                     col_index -= 1
                     start_time = end_time
-                    first_seq = False
+                    first_seq = True
 
                     # start_time is the time of first occurrence of a in series
                     # end_time is the column after last occurrence of b in series
@@ -162,6 +167,9 @@ if __name__ == '__main__':
                 behavior_a_start_time = 0
                 behavior_b_end_time = 0
                 behavioral_sequence_name = ""
+                first_seq = True
+            col_index += 1
+
         if continuing_sequence or continuing_behavior:
             probabilities_b = probability_sum
             behavior_b = temp_b
