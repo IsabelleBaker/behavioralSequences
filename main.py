@@ -85,11 +85,17 @@ if __name__ == '__main__':
                     num_behavior_instances += 1
                     first_seq = False
                 # If the behaviors are different, but it's only just started
+                # What if there's previous data to link to the probabilities?
                 elif temp_a != temp_b and first_seq:
                     start_time = data.columns[col_index]
-                    probabilities_a = float(probability_a)
+                    if num_behavior_instances > 0:
+                        probabilities_a = probability_sum
+                        num_behavior_instances_a = num_behavior_instances
+                    else:
+                        probabilities_a = float(probability_a)
+                        num_behavior_instances_a = 1
+                    num_behavior_instances = 1
                     probability_sum = float(probability_b)
-                    num_behavior_instances = 2
                     behavior_a = temp_a
                     behavior_b = temp_b
                     behavioral_sequence_name = behavior_a + "_" + behavior_b
@@ -99,16 +105,17 @@ if __name__ == '__main__':
                 # If the behaviors are different for the first time, set second behavior
                 elif temp_a != temp_b and not continuing_sequence:
                     behavior_b = temp_b
-                    num_behavior_instances += 1
+                    # num_behavior_instances += 1
                     probabilities_a = probability_sum
                     num_behavior_instances_a = num_behavior_instances
-                    probability_sum = 0
+                    num_behavior_instances = 1
+                    probability_sum = float(probability_b)
                     continuing_sequence = True
                     behavioral_sequence_name = behavior_a + "_" + behavior_b
                     first_seq = False
                 # If the behaviors are different, and you want to end the previous sequence
                 elif temp_a != temp_b and continuing_sequence:
-                    num_behavior_instances += 1
+                    # num_behavior_instances += 1
                     probabilities_b = probability_sum
                     num_behavior_instances_b = num_behavior_instances
                     mean_probability = (probabilities_a + probabilities_b) / (num_behavior_instances_a + num_behavior_instances_b)
@@ -123,8 +130,8 @@ if __name__ == '__main__':
                     df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
                     continuing_sequence = False
                     continuing_behavior = False
-                    num_behavior_instances -= 1
-                    probability_sum = probabilities_b
+                    # num_behavior_instances = num_behavior_instances_b
+                    #probabilities_ = probabilities_b
                     behavior_a = behavior_b
                     col_index -= 1
                     start_time = end_time
@@ -134,7 +141,7 @@ if __name__ == '__main__':
                     # end_time is the column after last occurrence of b in series
             else:
                 if continuing_sequence or continuing_behavior:
-                    num_behavior_instances += 1
+                    # num_behavior_instances += 1
                     probabilities_b = probability_sum
                     behavior_b = temp_a
                     behavioral_sequence_name = behavior_a + "_" + behavior_b
