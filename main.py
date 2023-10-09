@@ -77,10 +77,12 @@ if __name__ == '__main__':
                     probability_sum = float(probability_a) + float(probability_b)
                     num_behavior_instances = 2
                     behavior_a = temp_a
+                    first_seq = False
                 # If they're equal, but you already have previous data to link
-                elif temp_a != temp_b and continuing_behavior:
+                elif temp_a == temp_b and continuing_behavior:
                     probability_sum += float(probability_b)
                     num_behavior_instances += 1
+                    first_seq = False
                 # If the behaviors are different, but it's only just started
                 elif temp_a != temp_b and first_seq:
                     start_time = data.columns[col_index]
@@ -88,6 +90,7 @@ if __name__ == '__main__':
                     num_behavior_instances = 2
                     behavior_a = temp_a
                     continuing_behavior = True
+                    first_seq = False
                 # If the behaviors are different for the first time, set second behavior
                 elif temp_a != temp_b and not continuing_sequence:
                     behavior_b = temp_b
@@ -97,6 +100,7 @@ if __name__ == '__main__':
                     probability_sum = 0
                     continuing_sequence = True
                     behavioral_sequence_name = behavior_a + "_" + behavior_b
+                    first_seq = False
                 # If the behaviors are different, and you want to end the previous sequence
                 elif temp_a != temp_b and continuing_sequence:
                     num_behavior_instances += 1
@@ -119,6 +123,7 @@ if __name__ == '__main__':
                     behavior_a = behavior_b
                     col_index -= 1
                     start_time = end_time
+                    first_seq = False
 
                     # start_time is the time of first occurrence of a in series
                     # end_time is the column after last occurrence of b in series
