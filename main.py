@@ -17,10 +17,12 @@ def cleanData(input):
     # mean_probability: averaged probabilities of each behavior
     # start_time: in seconds (to two decimal places)
     # end_time: in seconds (to two decimal places)
+
+
 if __name__ == '__main__':
     # Make variables for later UI config
     # min_depth and max_depth which is number of behaviors in a row to consider
-    file_name = "all_events-1.xlsx"
+    file_name = "sequence_sample_data_test_cases.xlsx"
     min_depth = 2
     max_depth = 2
 
@@ -45,53 +47,121 @@ if __name__ == '__main__':
     # Go through each row of the file, starting with row two (animal ID 0)
     for i in range(data.shape[0]):
         continuing_behavior = False
-        continuing_sequence = True
+        continuing_sequence = False
         probability_sum = 0
+        probabilities_a = 0
+        probabilities_b = 0
         num_behavior_instances = 0
+        num_behavior_instances_a = 0
+        num_behavior_instances_b = 0
         behavior_a = ""
         behavior_b = ""
+        start_time = 0
+        behavioral_sequence_name = ""
+        first_seq = True
 
-        for col_index in range(1, data.shape[1] - 1):       # --> data.shape[1] is the # of columns
+        for col_index in range(1, data.shape[1] - 1):
+            # Get the next two behavior/probability pairs to look at
             current_data_a = cleanData(str(data.at[data.index[i], data.columns[col_index]]))
             current_data_b = cleanData(str(data.at[data.index[i], data.columns[col_index + 1]]))
             temp_a, probability_a = current_data_a
             temp_b, probability_b = current_data_b
 
+            # Starting a sequence
             # If the behavior (a) is not 'NA' and the next behavior (b) is not 'NA'
             if temp_a != "NA" and temp_b != "NA":
                 # If behavior (a) is the same as behavior (b), for the first time
-                if temp_a == temp_b and not continuing_behavior:
+                if temp_a == temp_b and not continuing_behavior and not continuing_sequence:
                     continuing_behavior = True
                     start_time = data.columns[col_index]
-                    probability_sum = probability_a + probability_b
+                    probability_sum = float(probability_a) + float(probability_b)
                     num_behavior_instances = 2
-                elif temp_a == temp_b and continuing_behavior:
-                    probability_sum += probability_b
+                    behavior_a = temp_a
+                # If they're equal, but you already have previous data to link
+                elif temp_a != temp_b and continuing_behavior:
+                    probability_sum += float(probability_b)
                     num_behavior_instances += 1
-                # If the behaviors are different, but this is a sequence
-                elif continuing_sequence:
-                    # Add a_b to the behavioral_sequence_name
-                    continuing_behavior = False
-                    behavioral_sequence_name = temp_a + "_" + temp_b
-                    # If alias exists, add to behavioral_sequence_alias, else "unknown"
-                    # Compute mean_probability for a and b
+                # If the behaviors are different, but it's only just started
+                elif temp_a != temp_b and first_seq:
+                    start_time = data.columns[col_index]
+                    probability_sum = float(probability_a) + float(probability_b)
+                    num_behavior_instances = 2
+                    behavior_a = temp_a
+                    continuing_behavior = True
+                # If the behaviors are different for the first time, set second behavior
+                elif temp_a != temp_b and not continuing_sequence:
+                    behavior_b = temp_b
+                    num_behavior_instances += 1
+                    probabilities_a = probability_sum
+                    num_behavior_instances_a = num_behavior_instances
+                    probability_sum = 0
+                    continuing_sequence = True
+                    behavioral_sequence_name = behavior_a + "_" + behavior_b
                 # If the behaviors are different, and you want to end the previous sequence
-                elif not continuing_sequence:
-                    mean_probability = (probability_sum) / num_behavior_instances
-                    end_time = data.columns[col_index + 1]
+                elif temp_a != temp_b and continuing_sequence:
+                    num_behavior_instances += 1
+                    probabilities_b = probability_sum
+                    num_behavior_instances_b = num_behavior_instances
+                    mean_probability = (probabilities_a + probabilities_b) / (num_behavior_instances_a + num_behavior_instances_b)
+                    end_time = data.columns[col_index]
                     animal_ID = data.at[i, data.columns[0]]
-                    new_data = {animal_ID, behavioral_sequence_name, mean_probability, start_time, end_time}
-                    df = df.append(new_data)
+                    # df1 = pd.DataFrame({"a": [1, 2, 3, 4],
+                    #                   "b": [5, 6, 7, 8]})
+                    new_data = {'animal_ID': animal_ID,
+                                             'behavioral_sequence_name': behavioral_sequence_name,
+                                             'mean_probability': mean_probability,
+                                             'start_time': start_time, 'end_time': end_time}
+                    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+                    continuing_sequence = False
+                    continuing_behavior = False
+                    num_behavior_instances -= 1
+                    probability_sum = probabilities_b
+                    behavior_a = behavior_b
+                    col_index -= 1
+                    start_time = end_time
+
                     # start_time is the time of first occurrence of a in series
                     # end_time is the column after last occurrence of b in series
             else:
+                if continuing_sequence or continuing_behavior:
+                    num_behavior_instances += 1
+                    probabilities_b = probability_sum
+                    behavior_b = temp_a
+                    behavioral_sequence_name = behavior_a + "_" + behavior_b
+                    num_behavior_instances_b = num_behavior_instances
+                    mean_probability = (probabilities_a + probabilities_b) / (num_behavior_instances_a + num_behavior_instances_b)
+                    end_time = data.columns[col_index]
+                    animal_ID = data.at[i, data.columns[0]]
+                    new_data = {'animal_ID': animal_ID,
+                                'behavioral_sequence_name': behavioral_sequence_name,
+                                'mean_probability': mean_probability,
+                                'start_time': start_time, 'end_time': end_time}
+                    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+                    continuing_sequence = False
+                    continuing_behavior = False
+                    num_behavior_instances -= 1
+                    probability_sum = probabilities_b
+                    behavior_a = behavior_b
+                    col_index -= 1
+                    start_time = end_time
                 continuing_behavior = False
-                continuing_sequence = True
+                continuing_sequence = False
                 probability_sum = 0
+                probabilities_a = 0
+                probabilities_b = 0
                 num_behavior_instances = 0
+                num_behavior_instances_a = 0
+                num_behavior_instances_b = 0
+                behavior_a = ""
+                behavior_b = ""
+                behavior_a_start_time = 0
+                behavior_b_end_time = 0
+                behavioral_sequence_name = ""
+
 
 
     # Return list of behavioral sequences for each ID
         # Includes start time and end time of each behavior sequence occurrence
     # Write to an Excel file
-    df.to_csv('file1.csv')
+    output_filename = './output_excel.xlsx'
+    df.to_excel(output_filename, index=False)
