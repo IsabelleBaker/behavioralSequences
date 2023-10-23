@@ -4,15 +4,17 @@ import threading
 import pandas as pd
 from pathlib import Path
 import platform, subprocess
+from GridPage import GridPage
 
 
 # Class: DynamicBackgroundInitialWindow
 # Description: This class was taken from LabGym and then modified for User input
-class DynamicBackgroundInitialWindow(wx.Frame):
+class BehaviorSequencesInitialWindow(wx.Frame):
 
     def __init__(self, title, mode='MIN'):
         wx.Frame.__init__(self, parent=None, title=title)
-        self.panel = DynamicBackgroundPanel(self, mode=mode)
+        self.panel = ControlPanel(self, mode=mode)
+        self.Bind(wx.EVT_CLOSE, self.onClose)
         self.frame_sizer = wx.BoxSizer(wx.VERTICAL)
         self.frame_sizer.Add(self.panel, 1, wx.EXPAND)
         self.SetSizer(self.frame_sizer)
@@ -20,13 +22,25 @@ class DynamicBackgroundInitialWindow(wx.Frame):
         self.Move(wx.Point(50, 50))
         self.Show()
 
+    # Make a custom close event to ensure the results window is closed whenever the main window closes
+    def onClose(self, event):
+        if self.panel.results:
+            self.panel.results.Destroy()  # close the results window
+        self.Destroy()  # close the main window
 
-class DynamicBackgroundPanel(wx.ScrolledWindow):
+
+class ControlPanel(wx.ScrolledWindow):
 
     def __init__(self, parent, mode='TEST'):
         wx.ScrolledWindow.__init__(self, parent, id=-1, pos=wx.DefaultPosition, size=wx.DefaultSize,
                                    style=wx.HSCROLL | wx.VSCROLL,
                                    name="scrolledWindow")
+        self.filtered_dataframe = None
+        self.min_duration = 0
+        self.results = None
+        self.min_mean_confidence = 0
+        self.behavior_filter = []
+        self.behavior_list = []
         self.SetScrollbars(1, 1, 600, 400)
 
         # Set up the variables that we want to capture
@@ -56,15 +70,38 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         self.sequence_length_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_sequence_length)
         self.sequence_length = self.sequence_length_widget.GetValue()
         self.sequence_length_text.Disable()
+        self.sequence_length_widget.Hide()
+        self.sequence_length_text.Hide()
         # self.sequence_length.Disable()
 
         # Process those sequences
         self.process_sequences_button = wx.Button(self, label='Process Sequences')
         self.process_sequences_button.Bind(wx.EVT_BUTTON, self.evt_process_sequences)
 
-        # Filters (confidence and ...name?)
-        # self.filter_confidence_button = wx.Button(self, label='Filter Sequences')
-        # self.filter_confidence_button.Bind(wx.EVT_BUTTON, self.evt_filter_confidence)
+        # Filters (confidence and duration)
+        self.min_duration_text = wx.StaticText(self, label='Minimum \nDuration (s)',
+                                               style=wx.ALIGN_CENTER_HORIZONTAL)
+        self.min_duration_widget = wx.SpinCtrlDouble(self, initial=0.0, min=0.0, max=9999.0, inc=0.005)
+        self.min_duration_text.SetToolTip('Enter the minimum total duration for a valid behavior sequence')
+        self.min_duration_widget.SetToolTip('Enter the minimum total duration for a valid behavior sequence')
+        self.min_duration_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.min_mean_confidence_text = wx.StaticText(self, label='Minimum \nConfidence (mean)',
+                                                      style=wx.ALIGN_CENTER_HORIZONTAL)
+        self.min_mean_confidence_text.SetToolTip('Confidence that the sequence was accurately identified. '
+                                                 '(Mean across all samples)')
+        self.min_mean_confidence_widget = wx.SpinCtrlDouble(self, initial=0.0, min=0.0, max=1.0, inc=0.05)
+        self.min_mean_confidence_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.min_mean_confidence_widget.SetToolTip('Confidence that the sequence was accurately identified. '
+                                                   '(Mean across all samples)')
+
+        self.clear_filter_default_button = wx.Button(self, label='Clear Filter')
+        self.clear_filter_default_button.SetToolTip('Clear Sequence Filter')
+        self.clear_filter_default_button.Bind(wx.EVT_BUTTON, self.evt_clear_filter_default)
+
+        self.set_behavior_filter_button = wx.Button(self, label='Customize Filter')
+        self.set_behavior_filter_button.SetToolTip('Select Sequences to Include in Results \n'
+                                                   'If none are selected, the filter is deactivated')
+        self.set_behavior_filter_button.Bind(wx.EVT_BUTTON, self.evt_set_behavior_filter)
 
         # Done button and closing everything
         save_button = wx.Button(self, label='Save')
@@ -72,6 +109,9 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 
         view_results_file_button = wx.Button(self, label='View Results File')
         view_results_file_button.Bind(wx.EVT_BUTTON, self.evt_open_result_file)
+
+        show_results_button = wx.Button(self, label='Show Results')
+        show_results_button.Bind(wx.EVT_BUTTON, self.evt_show_results)
 
         # Set up the container (BoxSizer) for the overall display window. Within this window, we will
         # place additional containers for sets of input and capabilities.
@@ -89,29 +129,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         get_input_options.Add(self.get_input_label, wx.EXPAND)
         get_input_options_vertical.Add(0, 5)
         get_input_options_vertical.Add(get_input_options, wx.ALIGN_CENTER_VERTICAL, wx.EXPAND)
-        """
-        # Add the inference size widgets in their own row.
-        inference_size_box = wx.StaticBox(self)
-        inference_size_sizer = wx.StaticBoxSizer(inference_size_box, wx.VERTICAL)
-
-        inference_size_sizer.Add(self.inference_size_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-        inference_size_sizer.Add(self.inference_size_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-        model_parameter_options.Add(inference_size_sizer, flag=wx.ALIGN_CENTER)
-        model_parameter_options.Add(5, 0)
-
-        # Add the threshold selection widgets in their own row.
-        detection_threshold_box = wx.StaticBox(self)
-        detection_threshold_sizer = wx.StaticBoxSizer(detection_threshold_box, wx.VERTICAL)
-
-        detection_threshold_sizer.Add(self.detection_threshold_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-        detection_threshold_sizer.Add(self.detection_threshold_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-        model_parameter_options.Add(detection_threshold_sizer, flag=wx.ALIGN_CENTER)
-        model_parameter_options.Add(5, 0)
-        """
 
         # Add the model options to the vertical window container
         overall_window_vertical.Add(get_input_options_vertical, flag=wx.EXPAND)
@@ -126,13 +143,52 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         # Add the image options to the vertical window container
         overall_window_vertical.Add(process_sequence_button_sizer)
 
-        ###### End of Step 3 GUI
-        save_button_horizontal = wx.BoxSizer(wx.HORIZONTAL)
+        #
+        # Create the individual boxes to hold filtering buttons
+        #
+        min_duration_box = wx.StaticBox(self)
+        min_duration_sizer = wx.StaticBoxSizer(min_duration_box, wx.VERTICAL)
+        min_duration_sizer.Add(self.min_duration_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        min_duration_sizer.Add(self.min_duration_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        min_mean_confidence_box = wx.StaticBox(self)
+        min_mean_confidence_sizer = wx.StaticBoxSizer(min_mean_confidence_box, wx.VERTICAL)
+        min_mean_confidence_sizer.Add(self.min_mean_confidence_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        min_mean_confidence_sizer.Add(self.min_mean_confidence_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        behavior_filter_box = wx.StaticBox(self)
+        behavior_filter_sizer = wx.StaticBoxSizer(behavior_filter_box, wx.VERTICAL)
+        behavior_filter_sizer.Add(self.clear_filter_default_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        behavior_filter_sizer.Add(0, 10)
+        behavior_filter_sizer.Add(self.set_behavior_filter_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
+        #
+        # Create the area to hold the individual filtering button boxes and add them
+        #
+        filter_behavior_sequences_horizontal = wx.BoxSizer(wx.HORIZONTAL)
+        filter_behavior_sequences_box = wx.StaticBox(self)
+        filter_behavior_sequences_options_vertical_sizer = (
+            wx.StaticBoxSizer(filter_behavior_sequences_box, wx.VERTICAL))
+        filter_behavior_sequences_parts_horizontal = wx.BoxSizer(wx.HORIZONTAL)
+        filter_behavior_sequences_parts_horizontal.Add(5, 0)
+        filter_behavior_sequences_parts_horizontal.Add(min_duration_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
+        filter_behavior_sequences_parts_horizontal.Add(5, 0)
+        filter_behavior_sequences_parts_horizontal.Add(min_mean_confidence_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
+        filter_behavior_sequences_parts_horizontal.Add(10, 0)
+        filter_behavior_sequences_parts_horizontal.Add(behavior_filter_sizer, wx.CENTER)
+        filter_behavior_sequences_options_vertical_sizer.Add(filter_behavior_sequences_parts_horizontal, wx.LEFT)
+        filter_behavior_sequences_horizontal.Add(filter_behavior_sequences_options_vertical_sizer,
+                                                 wx.ALIGN_CENTER_HORIZONTAL)
+
+        overall_window_vertical.Add(0, 5)
+        overall_window_vertical.Add(filter_behavior_sequences_horizontal, flag=wx.EXPAND)
+
+        ### Add to overall window
+        save_button_horizontal = wx.BoxSizer(wx.HORIZONTAL)
         save_box = wx.StaticBox(self)
         save_sizer = wx.StaticBoxSizer(save_box, wx.VERTICAL)
+        save_sizer.Add(show_results_button)
+        save_sizer.Add(0, 10)
         save_sizer.Add(save_button)
-        save_sizer.Add(0, 5)
+        save_sizer.Add(0, 10)
         save_sizer.Add(view_results_file_button)
         save_button_horizontal.Add(save_sizer)
         overall_window_vertical.Add(save_button_horizontal, wx.LEFT)
@@ -162,7 +218,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 
         # Make new Excel file to store info
         df = pd.DataFrame(columns=['animal_ID', 'behavioral_sequence_name', 'mean_confidence',
-                                   'start_time', 'end_time'])
+                                   'start_time', 'end_time', 'duration'])
 
         # First row is time
         # First column is animal ID (row.name is animal ID)
@@ -182,6 +238,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             behavior_a = ""
             behavior_b = ""
             start_time = 0
+            duration = 0
             behavioral_sequence_name = ""
             first_seq = True
             col_index = 1
@@ -246,8 +303,9 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                         animal_ID = data.at[i, data.columns[0]]
                         new_data = {'animal_ID': animal_ID,
                                     'behavioral_sequence_name': behavioral_sequence_name,
-                                    'mean_confidence': mean_probability,
-                                    'start_time': start_time, 'end_time': end_time}
+                                    'mean_confidence': round(mean_probability, 4),
+                                    'start_time': start_time, 'end_time': end_time,
+                                    'duration': round((end_time - start_time), 4)}
                         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
                         continuing_sequence = False
                         continuing_behavior = False
@@ -270,8 +328,9 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                         animal_ID = data.at[i, data.columns[0]]
                         new_data = {'animal_ID': animal_ID,
                                     'behavioral_sequence_name': behavioral_sequence_name,
-                                    'mean_confidence': mean_probability,
-                                    'start_time': start_time, 'end_time': end_time}
+                                    'mean_confidence': round(mean_probability, 4),
+                                    'start_time': start_time, 'end_time': end_time,
+                                    'duration': round((end_time - start_time), 4)}
                         df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
                         continuing_sequence = False
                         continuing_behavior = False
@@ -307,8 +366,9 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                 animal_ID = data.at[i, data.columns[0]]
                 new_data = {'animal_ID': animal_ID,
                             'behavioral_sequence_name': behavioral_sequence_name,
-                            'mean_confidence': mean_probability,
-                            'start_time': start_time, 'end_time': end_time}
+                            'mean_confidence': round(mean_probability, 4),
+                            'start_time': start_time, 'end_time': end_time,
+                            'duration': round((end_time - start_time), 4)}
                 df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
                 continuing_sequence = False
                 continuing_behavior = False
@@ -323,6 +383,8 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         # Write to an Excel file
         # output_filename = str(self.get_input_label)
         self.dataframe = df
+        self.behavior_list = list(self.dataframe['behavioral_sequence_name'].unique())
+        self.behavior_list.sort()
 
     def evt_save_results(self, event):
         output_filename = f'{Path(self.input_path).stem}_sequences.xlsx'
@@ -334,8 +396,9 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                 return
             filename = saveFile.GetPath()
             self.output_path = os.path.dirname(filename)
-            self.dataframe.to_excel(filename, index=False)
-
+            if self.filtered_dataframe is None:
+                self.filtered_dataframe = self.dataframe
+            self.filtered_dataframe.to_excel(filename, index=False)
         return
 
     def evt_open_result_file(self, event):
@@ -352,6 +415,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             else:  # linux variants
                 subprocess.call(('xdg-open', filename))
         return
+
     def evt_done(self, event):
         self.Parent.Destroy()
 
@@ -388,7 +452,8 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 
     def evt_process_sequences(self, event):
         if not self.input_path:
-            dlg = wx.GenericMessageDialog(None, 'No input file has been selected!', caption='Error', style=wx.OK | wx.CENTER)
+            dlg = wx.GenericMessageDialog(None, 'No input file has been selected!', caption='Error',
+                                          style=wx.OK | wx.CENTER)
             dlg.ShowModal()
             return
         if not self.sequence_length:
@@ -396,22 +461,65 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                                           style=wx.OK | wx.CENTER)
             dlg.ShowModal()
             return
-
-        thread = threading.Thread(target=self.get_behavioral_sequences)
-        thread.run()
-
-    def evt_filter_confidence(self, event):
-        if not self.min_confidence:
-            dlg = wx.GenericMessageDialog(None, 'No minimum confidence has been selected!', caption='Error', style=wx.OK | wx.CENTER)
+        try:
+            thread = threading.Thread(target=self.get_behavioral_sequences)
+            thread.run()
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            message = template.format(type(ex).__name__, ex.args)
+            print(message)
+            dlg = wx.GenericMessageDialog(None,
+                                          "Invalid data in Input Behavior File. "
+                                          "Select a different File",
+                                          caption='Error',
+                                          style=wx.OK | wx.CENTER)
             dlg.ShowModal()
-            return
 
-        # ADD FILTERING IN
-        thread = threading.Thread(target=self.get_behavioral_sequences)
-        thread.run()
+    def evt_set_filter(self, event):
+        self.min_duration = self.min_duration_widget.GetValue()
+        self.min_mean_confidence = self.min_mean_confidence_widget.GetValue()
+
+    def evt_set_behavior_filter(self, event):
+        checked_items = []
+        dlg = wx.MultiChoiceDialog(self, "Pick the behaviors you want included in the results (default is all)",
+                                   "Pick Behaviors", self.behavior_list)
+        if self.behavior_filter != self.behavior_list:
+            for sequence in self.behavior_filter:
+                checked_items.append(self.behavior_list.index(sequence))
+        dlg.SetSelections(checked_items)
+        if dlg.ShowModal() == wx.ID_OK:
+            self.behavior_filter = []
+            for selection in dlg.GetSelections():
+                self.behavior_filter.append(self.behavior_list[selection])
+
+    def evt_clear_filter_default(self, event):
+        self.behavior_filter = []
+        # self.behavior_list = []
+
+    def evt_show_results(self, event):
+        self.filtered_dataframe = self.dataframe[self.dataframe['duration'] >= self.min_duration]
+        self.filtered_dataframe = self.filtered_dataframe[self.filtered_dataframe['mean_confidence'] >=
+                                                          self.min_mean_confidence]
+        if len(self.behavior_filter) > 0:
+            self.filtered_dataframe = self.filtered_dataframe[
+                self.filtered_dataframe['behavioral_sequence_name'].isin(self.behavior_filter)]
+
+        if self.results:
+            self.results.update_dataframe(self.filtered_dataframe)
+            if self.results.IsShown():
+                self.results.panel.Layout()
+            else:
+                self.results.Show()
+        else:
+            self.results = GridPage('Behavior Sequences', width=800, height=200)
+            self.results.update_dataframe(self.filtered_dataframe)
+            self.results.Show()
+        self.behavior_list = list(self.filtered_dataframe['behavioral_sequence_name'].unique())
+        self.behavior_list.sort()
+
 
 # Run the program
 if __name__ == '__main__':
     app = wx.App()
-    DynamicBackgroundInitialWindow("Baker's Behavioral Sequence Detector Interface", mode='TEST')
+    BehaviorSequencesInitialWindow("Baker's Behavioral Sequence Detector Interface", mode='TEST')
     app.MainLoop()
