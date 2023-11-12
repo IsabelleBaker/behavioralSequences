@@ -40,8 +40,8 @@ class ControlPanel(wx.ScrolledWindow):
         self.min_duration = 0
         self.results = None
         self.min_mean_confidence = 0
-        self.min_depth = 0
-        self.max_depth = 0
+        self.min_depth = 2
+        self.max_depth = 2
         self.behavior_filter = []
         self.behavior_list = []
         self.SetScrollbars(1, 1, 600, 400)
@@ -100,15 +100,15 @@ class ControlPanel(wx.ScrolledWindow):
         self.min_depth_text = wx.StaticText(self, label='Minimum \nSequence Depth',
                                                       style=wx.ALIGN_CENTER_HORIZONTAL)
         self.min_depth_text.SetToolTip('Minimum number of behaviors in a sequence to detect')
-        self.min_depth_widget = wx.SpinCtrlDouble(self, initial=2, min=2, max=999, inc=1)
-        self.min_depth_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.min_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999, inc=1)
+        self.min_depth_widget.Bind(wx.EVT_SPINCTRL, self.evt_set_filter)
         self.min_depth_widget.SetToolTip('Minimum number of behaviors in a sequence to detect')
 
         self.max_depth_text = wx.StaticText(self, label='Maximum \nSequence Depth',
                                             style=wx.ALIGN_CENTER_HORIZONTAL)
         self.max_depth_text.SetToolTip('Maximum number of behaviors in a sequence to detect')
-        self.max_depth_widget = wx.SpinCtrlDouble(self, initial=2, min=2, max=999, inc=1)
-        self.max_depth_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.max_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999, inc=1)
+        self.max_depth_widget.Bind(wx.EVT_SPINCTRL, self.evt_set_filter)
         self.max_depth_widget.SetToolTip('Maximum number of behaviors in a sequence to detect')
 
         self.clear_filter_default_button = wx.Button(self, label='Clear Filter')
@@ -244,7 +244,7 @@ class ControlPanel(wx.ScrolledWindow):
         min_depth = self.min_depth
         max_depth = self.max_depth
         self.dataframe = behavioral_sequences_backend.process_file(self.input_path, min_depth, max_depth)
-        self.behavior_list = list(self.dataframe['behavioral_sequence_name'].unique())
+        self.behavior_list = list(self.dataframe['behavior_sequence'].unique())
         self.behavior_list.sort()
 
     def evt_save_results(self, event):
@@ -365,7 +365,7 @@ class ControlPanel(wx.ScrolledWindow):
                                                           self.min_mean_confidence]
         if len(self.behavior_filter) > 0:
             self.filtered_dataframe = self.filtered_dataframe[
-                self.filtered_dataframe['behavioral_sequence_name'].isin(self.behavior_filter)]
+                self.filtered_dataframe['behavior_sequence'].isin(self.behavior_filter)]
 
         if self.results:
             self.results.update_dataframe(self.filtered_dataframe)
@@ -377,7 +377,7 @@ class ControlPanel(wx.ScrolledWindow):
             self.results = GridPage('Behavior Sequences', width=800, height=200)
             self.results.update_dataframe(self.filtered_dataframe)
             self.results.Show()
-        self.behavior_list = list(self.filtered_dataframe['behavioral_sequence_name'].unique())
+        self.behavior_list = list(self.filtered_dataframe['behavior_sequence'].unique())
         self.behavior_list.sort()
 
 
