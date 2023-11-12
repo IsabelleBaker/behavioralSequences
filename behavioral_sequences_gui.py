@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 import platform, subprocess
 from GridPage import GridPage
+import behavioral_sequences_backend
 
 
 # Class: DynamicBackgroundInitialWindow
@@ -39,6 +40,8 @@ class ControlPanel(wx.ScrolledWindow):
         self.min_duration = 0
         self.results = None
         self.min_mean_confidence = 0
+        self.min_depth = 0
+        self.max_depth = 0
         self.behavior_filter = []
         self.behavior_list = []
         self.SetScrollbars(1, 1, 600, 400)
@@ -93,6 +96,20 @@ class ControlPanel(wx.ScrolledWindow):
         self.min_mean_confidence_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
         self.min_mean_confidence_widget.SetToolTip('Confidence that the sequence was accurately identified. '
                                                    '(Mean across all samples)')
+
+        self.min_depth_text = wx.StaticText(self, label='Minimum \nSequence Depth',
+                                                      style=wx.ALIGN_CENTER_HORIZONTAL)
+        self.min_depth_text.SetToolTip('Minimum number of behaviors in a sequence to detect')
+        self.min_depth_widget = wx.SpinCtrlDouble(self, initial=2, min=2, max=999, inc=1)
+        self.min_depth_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.min_depth_widget.SetToolTip('Minimum number of behaviors in a sequence to detect')
+
+        self.max_depth_text = wx.StaticText(self, label='Maximum \nSequence Depth',
+                                            style=wx.ALIGN_CENTER_HORIZONTAL)
+        self.max_depth_text.SetToolTip('Maximum number of behaviors in a sequence to detect')
+        self.max_depth_widget = wx.SpinCtrlDouble(self, initial=2, min=2, max=999, inc=1)
+        self.max_depth_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_filter)
+        self.max_depth_widget.SetToolTip('Maximum number of behaviors in a sequence to detect')
 
         self.clear_filter_default_button = wx.Button(self, label='Clear Filter')
         self.clear_filter_default_button.SetToolTip('Clear Sequence Filter')
@@ -154,6 +171,16 @@ class ControlPanel(wx.ScrolledWindow):
         min_mean_confidence_sizer = wx.StaticBoxSizer(min_mean_confidence_box, wx.VERTICAL)
         min_mean_confidence_sizer.Add(self.min_mean_confidence_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
         min_mean_confidence_sizer.Add(self.min_mean_confidence_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
+
+        min_depth_box = wx.StaticBox(self)
+        min_depth_sizer = wx.StaticBoxSizer(min_depth_box, wx.VERTICAL)
+        min_depth_sizer.Add(self.min_depth_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        min_depth_sizer.Add(self.min_depth_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        max_depth_box = wx.StaticBox(self)
+        max_depth_sizer = wx.StaticBoxSizer(max_depth_box, wx.VERTICAL)
+        max_depth_sizer.Add(self.max_depth_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        max_depth_sizer.Add(self.max_depth_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
+
         behavior_filter_box = wx.StaticBox(self)
         behavior_filter_sizer = wx.StaticBoxSizer(behavior_filter_box, wx.VERTICAL)
         behavior_filter_sizer.Add(self.clear_filter_default_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -172,6 +199,10 @@ class ControlPanel(wx.ScrolledWindow):
         filter_behavior_sequences_parts_horizontal.Add(min_duration_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
         filter_behavior_sequences_parts_horizontal.Add(5, 0)
         filter_behavior_sequences_parts_horizontal.Add(min_mean_confidence_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
+        filter_behavior_sequences_parts_horizontal.Add(5, 0)
+        filter_behavior_sequences_parts_horizontal.Add(min_depth_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
+        filter_behavior_sequences_parts_horizontal.Add(5, 0)
+        filter_behavior_sequences_parts_horizontal.Add(max_depth_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
         filter_behavior_sequences_parts_horizontal.Add(10, 0)
         filter_behavior_sequences_parts_horizontal.Add(behavior_filter_sizer, wx.CENTER)
         filter_behavior_sequences_options_vertical_sizer.Add(filter_behavior_sequences_parts_horizontal, wx.LEFT)
@@ -210,179 +241,9 @@ class ControlPanel(wx.ScrolledWindow):
         # Make variables for later UI config
         # min_depth and max_depth which is number of behaviors in a row to consider
         file_name = self.input_path
-        min_depth = 2
-        max_depth = 2
-
-        # Read in Excel file
-        data = pd.read_excel(file_name)
-
-        # Make new Excel file to store info
-        df = pd.DataFrame(columns=['animal_ID', 'behavioral_sequence_name', 'mean_confidence',
-                                   'start_time', 'end_time', 'duration'])
-
-        # First row is time
-        # First column is animal ID (row.name is animal ID)
-        # Each behavior is ['behavior_name', probability of behavior]
-        # Each row is the series of behaviors
-
-        # Go through each row of the file, starting with row two (animal ID 0)
-        for i in range(data.shape[0]):
-            continuing_behavior = False
-            continuing_sequence = False
-            probability_sum = 0
-            probabilities_a = 0
-            probabilities_b = 0
-            num_behavior_instances = 0
-            num_behavior_instances_a = 0
-            num_behavior_instances_b = 0
-            behavior_a = ""
-            behavior_b = ""
-            start_time = 0
-            duration = 0
-            behavioral_sequence_name = ""
-            first_seq = True
-            col_index = 1
-
-            while col_index < (data.shape[1] - 1):
-                # Get the next two behavior/probability pairs to look at
-                current_data_a = self.cleanData(str(data.at[data.index[i], data.columns[col_index]]))
-                current_data_b = self.cleanData(str(data.at[data.index[i], data.columns[col_index + 1]]))
-                temp_a, probability_a = current_data_a
-                temp_b, probability_b = current_data_b
-
-                # Starting a sequence
-                # If the behavior (a) is not 'NA' and the next behavior (b) is not 'NA'
-                if temp_a != "NA" and temp_b != "NA":
-                    # If behavior (a) is the same as behavior (b), for the first time
-                    if temp_a == temp_b and not continuing_behavior and not continuing_sequence:
-                        continuing_behavior = True
-                        start_time = data.columns[col_index]
-                        probability_sum = float(probability_a) + float(probability_b)
-                        num_behavior_instances = 2
-                        behavior_a = temp_a
-                        first_seq = False
-                    # If they're equal, but you already have previous data to link
-                    elif temp_a == temp_b and continuing_behavior:
-                        probability_sum += float(probability_b)
-                        num_behavior_instances += 1
-                        first_seq = False
-                    # If the behaviors are different, but it's only just started
-                    elif temp_a != temp_b and first_seq:
-                        start_time = data.columns[col_index]
-                        if num_behavior_instances > 0:
-                            probabilities_a = probability_sum
-                            num_behavior_instances_a = num_behavior_instances
-                        else:
-                            probabilities_a = float(probability_a)
-                            num_behavior_instances_a = 1
-                        num_behavior_instances = 1
-                        probability_sum = float(probability_b)
-                        behavior_a = temp_a
-                        behavior_b = temp_b
-                        behavioral_sequence_name = behavior_a + "_" + behavior_b
-                        continuing_behavior = True
-                        continuing_sequence = True
-                        first_seq = False
-                    # If the behaviors are different for the first time, set second behavior
-                    elif temp_a != temp_b and not continuing_sequence:
-                        behavior_b = temp_b
-                        probabilities_a = probability_sum
-                        num_behavior_instances_a = num_behavior_instances
-                        num_behavior_instances = 1
-                        probability_sum = float(probability_b)
-                        continuing_sequence = True
-                        behavioral_sequence_name = behavior_a + "_" + behavior_b
-                        first_seq = False
-                    # If the behaviors are different, and you want to end the previous sequence
-                    elif temp_a != temp_b and continuing_sequence:
-                        probabilities_b = probability_sum
-                        num_behavior_instances_b = num_behavior_instances
-                        mean_probability = (probabilities_a + probabilities_b) / (
-                                    num_behavior_instances_a + num_behavior_instances_b)
-                        end_time = data.columns[col_index]
-                        animal_ID = data.at[i, data.columns[0]]
-                        new_data = {'animal_ID': animal_ID,
-                                    'behavioral_sequence_name': behavioral_sequence_name,
-                                    'mean_confidence': round(mean_probability, 4),
-                                    'start_time': start_time, 'end_time': end_time,
-                                    'duration': round((end_time - start_time), 4)}
-                        df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-                        continuing_sequence = False
-                        continuing_behavior = False
-                        behavior_a = behavior_b
-                        col_index -= 1
-                        start_time = end_time
-                        first_seq = True
-
-                        # start_time is the time of first occurrence of a in series
-                        # end_time is the column after last occurrence of b in series
-                else:
-                    if continuing_sequence or continuing_behavior:
-                        probabilities_b = probability_sum
-                        behavior_b = temp_a
-                        behavioral_sequence_name = behavior_a + "_" + behavior_b
-                        num_behavior_instances_b = num_behavior_instances
-                        mean_probability = (probabilities_a + probabilities_b) / (
-                                    num_behavior_instances_a + num_behavior_instances_b)
-                        end_time = data.columns[col_index]
-                        animal_ID = data.at[i, data.columns[0]]
-                        new_data = {'animal_ID': animal_ID,
-                                    'behavioral_sequence_name': behavioral_sequence_name,
-                                    'mean_confidence': round(mean_probability, 4),
-                                    'start_time': start_time, 'end_time': end_time,
-                                    'duration': round((end_time - start_time), 4)}
-                        df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-                        continuing_sequence = False
-                        continuing_behavior = False
-                        num_behavior_instances -= 1
-                        probability_sum = probabilities_b
-                        behavior_a = behavior_b
-                        col_index -= 1
-                        start_time = end_time
-                    continuing_behavior = False
-                    continuing_sequence = False
-                    probability_sum = 0
-                    probabilities_a = 0
-                    probabilities_b = 0
-                    num_behavior_instances = 0
-                    num_behavior_instances_a = 0
-                    num_behavior_instances_b = 0
-                    behavior_a = ""
-                    behavior_b = ""
-                    behavior_a_start_time = 0
-                    behavior_b_end_time = 0
-                    behavioral_sequence_name = ""
-                    first_seq = True
-                col_index += 1
-
-            if continuing_sequence or continuing_behavior:
-                probabilities_b = probability_sum
-                behavior_b = temp_b
-                behavioral_sequence_name = behavior_a + "_" + behavior_b
-                num_behavior_instances_b = num_behavior_instances
-                mean_probability = (probabilities_a + probabilities_b) / (
-                        num_behavior_instances_a + num_behavior_instances_b)
-                end_time = data.columns[data.shape[1] - 1]
-                animal_ID = data.at[i, data.columns[0]]
-                new_data = {'animal_ID': animal_ID,
-                            'behavioral_sequence_name': behavioral_sequence_name,
-                            'mean_confidence': round(mean_probability, 4),
-                            'start_time': start_time, 'end_time': end_time,
-                            'duration': round((end_time - start_time), 4)}
-                df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-                continuing_sequence = False
-                continuing_behavior = False
-                num_behavior_instances -= 1
-                probability_sum = probabilities_b
-                behavior_a = behavior_b
-                col_index -= 1
-                start_time = end_time
-
-        # Return list of behavioral sequences for each ID
-        # Includes start time and end time of each behavior sequence occurrence
-        # Write to an Excel file
-        # output_filename = str(self.get_input_label)
-        self.dataframe = df
+        min_depth = self.min_depth
+        max_depth = self.max_depth
+        self.dataframe = behavioral_sequences_backend.process_file(self.input_path, min_depth, max_depth)
         self.behavior_list = list(self.dataframe['behavioral_sequence_name'].unique())
         self.behavior_list.sort()
 
@@ -478,6 +339,8 @@ class ControlPanel(wx.ScrolledWindow):
     def evt_set_filter(self, event):
         self.min_duration = self.min_duration_widget.GetValue()
         self.min_mean_confidence = self.min_mean_confidence_widget.GetValue()
+        self.min_depth = self.min_depth_widget.GetValue()
+        self.max_depth = self.max_depth_widget.GetValue()
 
     def evt_set_behavior_filter(self, event):
         checked_items = []
