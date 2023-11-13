@@ -100,14 +100,14 @@ class ControlPanel(wx.ScrolledWindow):
         self.min_depth_text = wx.StaticText(self, label='Minimum \nSequence Depth',
                                                       style=wx.ALIGN_CENTER_HORIZONTAL)
         self.min_depth_text.SetToolTip('Minimum number of behaviors in a sequence to detect')
-        self.min_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999, inc=1)
+        self.min_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999)
         self.min_depth_widget.Bind(wx.EVT_SPINCTRL, self.evt_set_filter)
         self.min_depth_widget.SetToolTip('Minimum number of behaviors in a sequence to detect')
 
         self.max_depth_text = wx.StaticText(self, label='Maximum \nSequence Depth',
                                             style=wx.ALIGN_CENTER_HORIZONTAL)
         self.max_depth_text.SetToolTip('Maximum number of behaviors in a sequence to detect')
-        self.max_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999, inc=1)
+        self.max_depth_widget = wx.SpinCtrl(self, initial=2, min=2, max=999)
         self.max_depth_widget.Bind(wx.EVT_SPINCTRL, self.evt_set_filter)
         self.max_depth_widget.SetToolTip('Maximum number of behaviors in a sequence to detect')
 
