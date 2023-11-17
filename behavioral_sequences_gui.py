@@ -244,7 +244,7 @@ class ControlPanel(wx.ScrolledWindow):
         min_depth = self.min_depth
         max_depth = self.max_depth
         self.dataframe = behavioral_sequences_backend.process_file(self.input_path, min_depth, max_depth)
-        self.behavior_list = list(self.dataframe['behavior_sequence'].unique())
+        self.behavior_list = list(self.dataframe['behavioral_sequence_name'].unique())
         self.behavior_list.sort()
 
     def evt_save_results(self, event):
@@ -365,7 +365,7 @@ class ControlPanel(wx.ScrolledWindow):
                                                           self.min_mean_confidence]
         if len(self.behavior_filter) > 0:
             self.filtered_dataframe = self.filtered_dataframe[
-                self.filtered_dataframe['behavior_sequence'].isin(self.behavior_filter)]
+                self.filtered_dataframe['behavioral_sequence_name'].isin(self.behavior_filter)]
 
         if self.results:
             self.results.update_dataframe(self.filtered_dataframe)
@@ -377,7 +377,7 @@ class ControlPanel(wx.ScrolledWindow):
             self.results = GridPage('Behavior Sequences', width=800, height=200)
             self.results.update_dataframe(self.filtered_dataframe)
             self.results.Show()
-        self.behavior_list = list(self.filtered_dataframe['behavior_sequence'].unique())
+        self.behavior_list = list(self.filtered_dataframe['behavioral_sequence_name'].unique())
         self.behavior_list.sort()
 
 
