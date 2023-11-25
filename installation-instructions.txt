@@ -1,0 +1,8 @@
+1) download the entire repository and place it within your python3 environment
+2) open the terminal and navigate to the root of the project
+3) at the terminal run: python3 setup.py install
+      -This should install and update all required packages
+4) to run the User Interface, type in the terminal: python3 behavioral_sequences_gui.py
+
+That's it. The project is installed and you are running the User Interface to
+find behavior sequences from LabGym files!
